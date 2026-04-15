@@ -31,30 +31,29 @@ export type State = {
   };
   message?: string | null;
 };
-const CreateInvoice = FormSchema.omit({ id: true, date: true });
 
+const CreateInvoice = FormSchema.omit({ id: true, date: true });
 export async function createInvoice(
   prevState: State,
   formData: FormData
 ): Promise<State> {
-  const rawAmount = formData.get('amount');
-  const amount = typeof rawAmount === 'string' ? Number(rawAmount) : NaN;
 
   const validatedFields = CreateInvoice.safeParse({
     customerId: formData.get('customerId'),
-    amount,
+    amount: formData.get('amount'),
     status: formData.get('status'),
   });
 
   if (!validatedFields.success) {
+    console.log('VALIDATION ERROR:', validatedFields.error.flatten());
     return {
       errors: validatedFields.error.flatten().fieldErrors,
       message: 'Missing Fields. Failed to Create Invoice.',
     };
   }
 
-  const { customerId, amount: validAmount, status } = validatedFields.data;
-  const amountInCents = validAmount * 100;
+  const { customerId, amount, status } = validatedFields.data;
+  const amountInCents = amount * 100;
   const date = new Date().toLocaleDateString('en-CA');
 
   try {
@@ -63,6 +62,7 @@ export async function createInvoice(
       VALUES (${customerId}, ${amountInCents}, ${status}, ${date})
     `;
   } catch (error) {
+    console.error('DB ERROR:', error);
     return {
       message: 'Database Error: Failed to Create Invoice.',
     };
@@ -70,12 +70,6 @@ export async function createInvoice(
 
   revalidatePath('/dashboard/invoices');
   redirect('/dashboard/invoices');
-
-  // technically unreachable, but required for TS
-  return {
-    message: null,
-    errors: {},
-  };
 }
 
 
@@ -116,13 +110,11 @@ export async function updateInvoice(
   redirect('/dashboard/invoices');
 }
 
-export async function deleteInvoice(id : string){
-
-        await sql`
-        DELETE FROM invoices WHERE id = ${id}
-        `;
-    
-    revalidatePath('/dashboard/invoices');
+export async function deleteInvoice(id: string, formData: FormData) {
+    await sql`
+      DELETE FROM invoices WHERE id = ${id}
+    `;
+  revalidatePath('/dashboard/invoices');
 }
 
 export async function authenticate(
