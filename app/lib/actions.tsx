@@ -31,45 +31,53 @@ export type State = {
   };
   message?: string | null;
 };
+const CreateInvoice = FormSchema.omit({ id: true, date: true });
 
-const CreateInvoice = FormSchema.omit({id:true, date:true});
+export async function createInvoice(
+  prevState: State,
+  formData: FormData
+): Promise<State> {
+  const rawAmount = formData.get('amount');
+  const amount = typeof rawAmount === 'string' ? Number(rawAmount) : NaN;
 
-export async function createInvoice(formData : FormData){
-
-    const validatedFields = CreateInvoice.safeParse({
+  const validatedFields = CreateInvoice.safeParse({
     customerId: formData.get('customerId'),
-    amount: formData.get('amount'),
+    amount,
     status: formData.get('status'),
   });
- 
-  // If form validation fails, return errors early. Otherwise, continue.
+
   if (!validatedFields.success) {
     return {
       errors: validatedFields.error.flatten().fieldErrors,
       message: 'Missing Fields. Failed to Create Invoice.',
     };
   }
- 
-  // Prepare data for insertion into the database
-  const { customerId, amount, status } = validatedFields.data;
-  const amountInCents = amount * 100;
-  const date = new Date().toISOString().split('T')[0];
 
-    try{
-        await sql`
-            INSERT INTO invoices (customer_id, amount, status, date) VALUES
-            (${customerId}, ${amountInCents}, ${status}, ${date})
-        `;
-    }
-    catch(err){
-        console.error('Error creating invoice:', err);
-        return { message : "Database Error: Failed to Create Invoice." }
-    }
+  const { customerId, amount: validAmount, status } = validatedFields.data;
+  const amountInCents = validAmount * 100;
+  const date = new Date().toLocaleDateString('en-CA');
 
+  try {
+    await sql`
+      INSERT INTO invoices (customer_id, amount, status, date)
+      VALUES (${customerId}, ${amountInCents}, ${status}, ${date})
+    `;
+  } catch (error) {
+    return {
+      message: 'Database Error: Failed to Create Invoice.',
+    };
+  }
 
-    revalidatePath('/dashboard/invoices');
-    redirect('/dashboard/invoices');
+  revalidatePath('/dashboard/invoices');
+  redirect('/dashboard/invoices');
+
+  // technically unreachable, but required for TS
+  return {
+    message: null,
+    errors: {},
+  };
 }
+
 
 const UpdateInvoice = FormSchema.omit({ id: true, date: true });
 
@@ -110,15 +118,10 @@ export async function updateInvoice(
 
 export async function deleteInvoice(id : string){
 
-    try{
         await sql`
         DELETE FROM invoices WHERE id = ${id}
         `;
-    }
-    catch(err){
-        console.error('Error deleting invoice:', err);
-        return { message : "Database Error: Failed to Delete Invoice." }
-    }
+    
     revalidatePath('/dashboard/invoices');
 }
 
